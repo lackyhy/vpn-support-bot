@@ -269,9 +269,9 @@ class RemnawaveClient:
 
     # ================== SQUADS ==================
     async def get_squads(self) -> Dict[str, Any]:
-        res = await self._request("GET", "/api/squads")
+        res = await self._request("GET", "/api/internal-squads")
         if not res.get("success"):
-            res = await self._request("GET", "/api/internal-squads")
+            res = await self._request("GET", "/api/squads")
         return res
 
     async def create_subpage_config(self, name: str, html_content: str = "") -> Dict[str, Any]:

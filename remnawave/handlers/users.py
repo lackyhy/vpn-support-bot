@@ -187,25 +187,38 @@ async def cb_user_view(callback: CallbackQuery):
     # Squad lookup & extraction
     squad_lookup = {}
     if isinstance(squads_res, dict) and squads_res.get("success"):
-        squads_data = squads_res.get("response", [])
-        if isinstance(squads_data, list):
-            for sq in squads_data:
-                if isinstance(sq, dict):
-                    s_uuid = sq.get("uuid") or sq.get("id")
-                    s_name = sq.get("name") or sq.get("title")
-                    if s_uuid and s_name:
-                        squad_lookup[str(s_uuid)] = s_name
-    elif isinstance(squads_res, dict) and isinstance(squads_res.get("response"), dict):
-        squads_list = squads_res.get("response", {}).get("squads", [])
+        resp_obj = squads_res.get("response", [])
+        if isinstance(resp_obj, list):
+            squads_list = resp_obj
+        elif isinstance(resp_obj, dict):
+            squads_list = resp_obj.get("internalSquads") or resp_obj.get("squads") or resp_obj.get("items") or []
+        else:
+            squads_list = []
+
         for sq in squads_list:
             if isinstance(sq, dict):
                 s_uuid = sq.get("uuid") or sq.get("id")
                 s_name = sq.get("name") or sq.get("title")
                 if s_uuid and s_name:
-                    squad_lookup[str(s_uuid)] = s_name
+                    squad_lookup[str(s_uuid)] = str(s_name)
 
     def resolve_squad(u: dict, lookup: dict) -> str:
-        sq_val = u.get("squad") or u.get("squads") or u.get("activeSquad")
+        candidates = [
+            u.get("internalSquads"),
+            u.get("internalSquad"),
+            u.get("activeInternalSquads"),
+            u.get("userInternalSquads"),
+            u.get("squads"),
+            u.get("squad"),
+            u.get("activeSquad")
+        ]
+        
+        sq_val = None
+        for cand in candidates:
+            if cand is not None and cand != [] and cand != "":
+                sq_val = cand
+                break
+
         if sq_val:
             if isinstance(sq_val, str):
                 return lookup.get(sq_val, sq_val)
@@ -227,12 +240,16 @@ async def cb_user_view(callback: CallbackQuery):
                             res_names.append(n)
                 if res_names:
                     return ", ".join(res_names)
-        
+
+        if u.get("internalSquadName"):
+            return str(u.get("internalSquadName"))
         if u.get("squadName"):
             return str(u.get("squadName"))
-        sq_uuid = u.get("squadUuid") or u.get("squadId")
+
+        sq_uuid = u.get("internalSquadUuid") or u.get("squadUuid") or u.get("squadId")
         if sq_uuid and str(sq_uuid) in lookup:
             return lookup[str(sq_uuid)]
+
         return "—"
 
     squad_str = resolve_squad(user, squad_lookup)
