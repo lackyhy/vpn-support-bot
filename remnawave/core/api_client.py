@@ -246,24 +246,29 @@ class RemnawaveClient:
         if user_uuid:
             payload["uuid"] = user_uuid
 
-        res = await self._request("PATCH", "/api/users", json=payload)
-        if res.get("success"):
-            return res
-
-        res = await self._request("PATCH", f"/api/users/{user_id}", json=data)
-        if res.get("success"):
-            return res
-
-        res = await self._request("PUT", f"/api/users/{user_id}", json=data)
-        if res.get("success"):
-            return res
-
+        endpoints = []
         if user_uuid:
-            res = await self._request("PATCH", f"/api/users/{user_uuid}", json=data)
+            endpoints.extend([
+                ("PATCH", f"/api/users/{user_uuid}", data),
+                ("PATCH", f"/api/users/{user_uuid}", payload),
+                ("PUT", f"/api/users/{user_uuid}", data),
+            ])
+        endpoints.extend([
+            ("PATCH", f"/api/users/{user_id}", data),
+            ("PATCH", f"/api/users/{user_id}", payload),
+            ("PUT", f"/api/users/{user_id}", data),
+            ("PATCH", "/api/users", payload),
+            ("PUT", "/api/users", payload),
+        ])
+
+        last_res = {"success": False, "msg": "Failed to update user"}
+        for method, ep, req_data in endpoints:
+            res = await self._request(method, ep, json=req_data)
             if res.get("success"):
                 return res
+            last_res = res
 
-        return res
+        return last_res
 
     async def delete_user(self, user_id: int) -> Dict[str, Any]:
         return await self._request("DELETE", f"/api/users/{user_id}")

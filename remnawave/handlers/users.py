@@ -469,11 +469,23 @@ async def process_user_edit_username(message: Message, state: FSMContext):
         u_uuid = u_res.get("response", {}).get("uuid")
 
     res = await client.update_user(user_id, {"username": new_username}, user_uuid=u_uuid)
-    await client.close()
     
-    if res.get("success"):
+    # Re-fetch user details to verify the updated username
+    verify_res = await client._request("GET", f"/api/users/{user_id}")
+    await client.close()
+
+    updated_user = verify_res.get("response", {}) if isinstance(verify_res.get("response"), dict) else {}
+    updated_name = updated_user.get("username", new_username)
+
+    if res.get("success") and updated_name.lower() == new_username.lower():
         await message.answer(
-            f"✅ Username updated to `{new_username}`!" if lang == "en" else f"✅ Имя пользователя обновлено на `{new_username}`!"
+            f"✅ Username updated to `{updated_name}`!" if lang == "en" else f"✅ Имя пользователя обновлено на `{updated_name}`!"
+        )
+    elif res.get("success"):
+        await message.answer(
+            f"⚠️ Request processed, current username: `{updated_name}`."
+            if lang == "en" else
+            f"⚠️ Запрос обработан, текущее имя пользователя: `{updated_name}`."
         )
     else:
         await message.answer(f"❌ Failed: {res.get('msg')}")
