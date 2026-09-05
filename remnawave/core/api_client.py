@@ -240,10 +240,30 @@ class RemnawaveClient:
             payload["hwidDeviceLimit"] = int(hwid_limit)
         return await self._request("POST", "/api/users", json=payload)
 
-    async def update_user(self, user_id: int, data: Dict[str, Any]) -> Dict[str, Any]:
+    async def update_user(self, user_id: int, data: Dict[str, Any], user_uuid: Optional[str] = None) -> Dict[str, Any]:
         payload = dict(data)
         payload["id"] = int(user_id)
-        return await self._request("PATCH", "/api/users", json=payload)
+        if user_uuid:
+            payload["uuid"] = user_uuid
+
+        res = await self._request("PATCH", "/api/users", json=payload)
+        if res.get("success"):
+            return res
+
+        res = await self._request("PATCH", f"/api/users/{user_id}", json=data)
+        if res.get("success"):
+            return res
+
+        res = await self._request("PUT", f"/api/users/{user_id}", json=data)
+        if res.get("success"):
+            return res
+
+        if user_uuid:
+            res = await self._request("PATCH", f"/api/users/{user_uuid}", json=data)
+            if res.get("success"):
+                return res
+
+        return res
 
     async def delete_user(self, user_id: int) -> Dict[str, Any]:
         return await self._request("DELETE", f"/api/users/{user_id}")
