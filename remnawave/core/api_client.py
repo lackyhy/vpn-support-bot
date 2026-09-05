@@ -310,12 +310,9 @@ class RemnawaveClient:
                     )
 
                 if items:
-                    if ep in ["/api/hwid/devices", "/api/hwid-devices", "/api/internal-hwid-devices", "/api/user-hwid-devices", "/api/hwids", "/api/hwid"]:
-                        filtered = [it for it in items if _device_matches_user(it, user_id, username, user_uuid)]
-                        if filtered:
-                            return {"success": True, "response": filtered}
-                    else:
-                        return {"success": True, "response": items}
+                    filtered = [it for it in items if _device_matches_user(it, user_id, username, user_uuid)]
+                    if filtered:
+                        return {"success": True, "response": filtered}
 
         return {"success": False, "msg": "No HWID devices found"}
 
