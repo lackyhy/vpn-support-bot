@@ -356,26 +356,27 @@ def _device_matches_user(item: Any, user_id: int, username: Optional[str] = None
     if not isinstance(item, dict):
         return True
 
-    u_obj = item.get("user") or item.get("owner") or item.get("account")
-
     cand_ids = []
     cand_names = []
 
-    for k in ["userId", "user_id", "id"]:
+    # Check top-level user fields ONLY (NOT item['id'] or item['uuid'] which are device IDs!)
+    for k in ["userId", "user_id"]:
         val = item.get(k)
         if val is not None and not isinstance(val, (dict, list)):
             cand_ids.append(str(val))
 
-    for k in ["userUuid", "user_uuid", "uuid"]:
+    for k in ["userUuid", "user_uuid"]:
         val = item.get(k)
         if val is not None and not isinstance(val, (dict, list)):
             cand_ids.append(str(val))
 
-    for k in ["username", "user_name", "user"]:
-        val = item.get(k)
-        if isinstance(val, str):
-            cand_names.append(val.lower())
+    if isinstance(item.get("username"), str):
+        cand_names.append(str(item.get("username")).lower())
+    if isinstance(item.get("user_name"), str):
+        cand_names.append(str(item.get("user_name")).lower())
 
+    # Check nested user object
+    u_obj = item.get("user") or item.get("owner") or item.get("account")
     if isinstance(u_obj, dict):
         for k in ["id", "userId", "user_id", "uuid", "userUuid"]:
             val = u_obj.get(k)
@@ -385,8 +386,10 @@ def _device_matches_user(item: Any, user_id: int, username: Optional[str] = None
             val = u_obj.get(k)
             if isinstance(val, str):
                 cand_names.append(val.lower())
-    elif isinstance(u_obj, (int, str)):
-        val_str = str(u_obj).lower()
+    elif isinstance(u_obj, int):
+        cand_ids.append(str(u_obj))
+    elif isinstance(u_obj, str):
+        val_str = u_obj.lower()
         cand_ids.append(val_str)
         cand_names.append(val_str)
 
