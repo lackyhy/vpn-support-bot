@@ -111,18 +111,42 @@ def user_devices_kb(user_id: int, devices: List[Any] = None, lang: Optional[str]
     buttons = []
 
     if devices:
-        for idx, dev in enumerate(devices[:5]):
-            dev_id = None
+        row = []
+        for idx, dev in enumerate(devices):
+            icon = "📱"
+            label = f"#{idx+1}"
+
             if isinstance(dev, dict):
-                dev_id = dev.get("id") or dev.get("uuid") or dev.get("hwid")
-            if dev_id:
-                label = dev.get("model") or dev.get("name") or dev.get("platform") or f"Device #{idx+1}"
-                buttons.append([
-                    InlineKeyboardButton(
-                        text=f"🗑 {label}" if cur_lang == "en" else f"🗑 Удалить {label}",
-                        callback_data=f"remna_dev_del_{user_id}_{dev_id}"
-                    )
-                ])
+                platform = dev.get("platform") or dev.get("os") or ""
+                if platform:
+                    plat_l = str(platform).lower()
+                    if "win" in plat_l:
+                        icon = "💻"
+                        label = f"#{idx+1} Win"
+                    elif "ios" in plat_l or "iphone" in plat_l:
+                        icon = "📱"
+                        label = f"#{idx+1} iOS"
+                    elif "mac" in plat_l:
+                        icon = "💻"
+                        label = f"#{idx+1} Mac"
+                    elif "android" in plat_l:
+                        icon = "🤖"
+                        label = f"#{idx+1} Android"
+                    else:
+                        label = f"#{idx+1} {str(platform)[:6]}"
+                else:
+                    label = f"#{idx+1} Device"
+            elif isinstance(dev, str):
+                label = f"#{idx+1} {dev[:6]}"
+
+            btn_text = f"{icon} {label}"
+            row.append(InlineKeyboardButton(text=btn_text, callback_data=f"remna_dev_view_{user_id}_{idx}"))
+
+            if len(row) == 2:
+                buttons.append(row)
+                row = []
+        if row:
+            buttons.append(row)
 
         buttons.append([
             InlineKeyboardButton(
@@ -132,9 +156,17 @@ def user_devices_kb(user_id: int, devices: List[Any] = None, lang: Optional[str]
         ])
 
     buttons.append([
-        InlineKeyboardButton(text="✏️ Edit Limit" if cur_lang == "en" else "✏️ Изменить лимит HWID", callback_data=f"remna_user_hwid_{user_id}"),
+        InlineKeyboardButton(text="✏️ Edit HWID Limit" if cur_lang == "en" else "✏️ Изменить лимит HWID", callback_data=f"remna_user_hwid_{user_id}"),
         InlineKeyboardButton(text="🔙 Back to User" if cur_lang == "en" else "🔙 К пользователю", callback_data=f"remna_user_view_{user_id}")
     ])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+def single_device_kb(user_id: int, dev_identifier: str, lang: Optional[str] = None) -> InlineKeyboardMarkup:
+    cur_lang = lang or "en"
+    buttons = [
+        [InlineKeyboardButton(text="🗑 Delete Device" if cur_lang == "en" else "🗑 Удалить устройство", callback_data=f"remna_dev_del_{user_id}_{dev_identifier}")],
+        [InlineKeyboardButton(text="🔙 Back to Devices" if cur_lang == "en" else "🔙 К устройствам", callback_data=f"remna_user_devices_{user_id}")]
+    ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 def nodes_list_kb(nodes: List[Dict[str, Any]], lang: Optional[str] = None) -> InlineKeyboardMarkup:

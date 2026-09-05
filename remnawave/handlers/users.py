@@ -506,20 +506,16 @@ async def cb_user_devices(callback: CallbackQuery):
 
     if devices:
         for idx, dev in enumerate(devices):
-            if isinstance(dev, str):
-                lines.append(f"📱 **Device #{idx+1}**: `{dev}`")
-            elif isinstance(dev, dict):
-                d_platform = dev.get("platform") or dev.get("os")
-                d_model = dev.get("model") or dev.get("name") or dev.get("title") or dev.get("device")
-                d_hwid = dev.get("hwid") or dev.get("id") or dev.get("uuid") or dev.get("fingerprint")
-                d_ip = dev.get("ipAddress") or dev.get("ip_address") or dev.get("ip")
-                d_ua = dev.get("userAgent") or dev.get("user_agent")
-                d_updated = dev.get("updatedAt") or dev.get("lastOnlineAt") or dev.get("lastSeenAt") or dev.get("onlineAt")
-                d_created = dev.get("createdAt")
+            icon = "📱"
+            plat_str = ""
+            model_str = ""
 
-                icon = "📱"
-                if d_platform:
-                    plat_l = str(d_platform).lower()
+            if isinstance(dev, dict):
+                platform = dev.get("platform") or dev.get("os") or ""
+                model = dev.get("model") or dev.get("name") or dev.get("title") or dev.get("device") or ""
+
+                if platform:
+                    plat_l = str(platform).lower()
                     if "win" in plat_l:
                         icon = "💻"
                     elif "ios" in plat_l or "iphone" in plat_l or "ipad" in plat_l:
@@ -530,36 +526,17 @@ async def cb_user_devices(callback: CallbackQuery):
                         icon = "🤖"
                     elif "linux" in plat_l:
                         icon = "🐧"
+                    plat_str = str(platform)
+                if model:
+                    model_str = f" ({model})"
 
-                hwid_disp = f"`{d_hwid}`" if d_hwid else "—"
-                updated_disp = format_iso_date(d_updated) if d_updated else "—"
-                created_disp = format_iso_date(d_created) if d_created else "—"
+            info_part = f"{plat_str}{model_str}".strip()
+            if not info_part and isinstance(dev, str):
+                info_part = f"`{dev[:12]}...`"
+            elif not info_part:
+                info_part = "Device" if lang == "en" else "Устройство"
 
-                det = []
-                if d_platform and d_model:
-                    det.append(f"**Платформа / Модель**: {d_platform} ({d_model})" if lang == "ru" else f"**Platform / Model**: {d_platform} ({d_model})")
-                elif d_platform:
-                    det.append(f"**Платформа**: {d_platform}" if lang == "ru" else f"**Platform**: {d_platform}")
-                elif d_model:
-                    det.append(f"**Модель**: {d_model}" if lang == "ru" else f"**Model**: {d_model}")
-
-                det.append(f"**HWID**: {hwid_disp}")
-
-                if d_ip:
-                    det.append(f"**IP-адрес**: `{d_ip}`" if lang == "ru" else f"**IP Address**: `{d_ip}`")
-
-                if d_ua:
-                    ua_short = d_ua.split(" ")[0] if len(d_ua) > 35 else d_ua
-                    det.append(f"**User Agent**: `{ua_short}`")
-
-                if updated_disp != "—":
-                    det.append(f"**Обновлен**: {updated_disp}" if lang == "ru" else f"**Updated**: {updated_disp}")
-                elif created_disp != "—":
-                    det.append(f"**Создан**: {created_disp}" if lang == "ru" else f"**Created**: {created_disp}")
-
-                lines.append(f"{icon} **Устройство #{idx+1}**:\n  • " + "\n  • ".join(det))
-            else:
-                lines.append(f"📱 **Device #{idx+1}**: `{str(dev)}`")
+            lines.append(f"{icon} **#{idx+1}**: {info_part}")
     else:
         lines.append("ℹ️ No registered devices yet." if lang == "en" else "ℹ️ Привязанных устройств пока нет.")
 
@@ -567,6 +544,119 @@ async def cb_user_devices(callback: CallbackQuery):
     await callback.message.edit_text(
         text,
         reply_markup=keyboards.user_devices_kb(user_id, devices, lang=lang),
+        parse_mode="Markdown"
+    )
+    await callback.answer()
+
+# SINGLE DEVICE DETAIL VIEW
+@router.callback_query(F.data.startswith("remna_dev_view_"))
+async def cb_single_device_view(callback: CallbackQuery):
+    lang = bot_settings.get_language()
+    parts = callback.data.replace("remna_dev_view_", "").split("_")
+    user_id = int(parts[0])
+    idx = int(parts[1])
+
+    client = RemnawaveClient.from_storage()
+    user_res = await client._request("GET", f"/api/users/{user_id}")
+    if not user_res.get("success", False):
+        await client.close()
+        await callback.answer(f"Error: {user_res.get('msg')}", show_alert=True)
+        return
+
+    user = user_res.get("response", {})
+    username = user.get("username", "Unknown")
+    user_uuid = user.get("uuid")
+
+    devices_res = await client.get_user_hwid_devices(user_id, username=username, user_uuid=user_uuid)
+    await client.close()
+
+    devices = []
+    if isinstance(devices_res, dict) and devices_res.get("success"):
+        resp_d = devices_res.get("response", [])
+        if isinstance(resp_d, list):
+            devices = resp_d
+        elif isinstance(resp_d, dict):
+            devices = (
+                resp_d.get("devices") or 
+                resp_d.get("hwidDevices") or 
+                resp_d.get("userHwidDevices") or
+                resp_d.get("internalHwidDevices") or
+                resp_d.get("items") or 
+                []
+            )
+
+    if not devices:
+        devices = (
+            user.get("userHwidDevices") or
+            user.get("hwidDevices") or 
+            user.get("internalHwidDevices") or
+            user.get("devices") or 
+            user.get("userDevices") or 
+            user.get("hwids") or
+            user.get("userTraffic", {}).get("hwidDevices") or 
+            user.get("userTraffic", {}).get("devices") or
+            []
+        )
+
+    if idx < 0 or idx >= len(devices):
+        await callback.answer("Device not found" if lang == "en" else "Устройство не найдено", show_alert=True)
+        return
+
+    dev = devices[idx]
+    dev_identifier = str(idx)
+
+    lines = []
+    if isinstance(dev, dict):
+        dev_id_raw = dev.get("id") or dev.get("uuid") or dev.get("hwid")
+        if dev_id_raw:
+            dev_identifier = str(dev_id_raw)
+
+        d_platform = dev.get("platform") or dev.get("os")
+        d_model = dev.get("model") or dev.get("name") or dev.get("title") or dev.get("device")
+        d_hwid = dev.get("hwid") or dev.get("id") or dev.get("uuid") or dev.get("fingerprint")
+        d_ip = dev.get("ipAddress") or dev.get("ip_address") or dev.get("ip")
+        d_ua = dev.get("userAgent") or dev.get("user_agent")
+        d_updated = dev.get("updatedAt") or dev.get("lastOnlineAt") or dev.get("lastSeenAt") or dev.get("onlineAt")
+        d_created = dev.get("createdAt")
+
+        icon = "📱"
+        if d_platform:
+            plat_l = str(d_platform).lower()
+            if "win" in plat_l:
+                icon = "💻"
+            elif "ios" in plat_l or "iphone" in plat_l or "ipad" in plat_l:
+                icon = "📱"
+            elif "mac" in plat_l or "apple" in plat_l:
+                icon = "💻"
+            elif "android" in plat_l:
+                icon = "🤖"
+
+        hwid_disp = f"`{d_hwid}`" if d_hwid else "—"
+        updated_disp = format_iso_date(d_updated) if d_updated else "—"
+        created_disp = format_iso_date(d_created) if d_created else "—"
+
+        plat_title = f"{d_platform}" if d_platform else "Device"
+        lines.append(f"{icon} **{plat_title} #{idx+1}**" if lang == "en" else f"{icon} **Устройство #{idx+1} ({plat_title})**")
+        lines.append("━━━━━━━━━━━━━━━━━━")
+        lines.append(f"👤 **User**: `{username}`" if lang == "en" else f"👤 **Пользователь**: `{username}`")
+        if d_model:
+            lines.append(f"📱 **Model**: {d_model}" if lang == "en" else f"📱 **Модель**: {d_model}")
+        lines.append(f"🔑 **HWID**: {hwid_disp}")
+        if d_ip:
+            lines.append(f"🌐 **IP Address**: `{d_ip}`" if lang == "en" else f"🌐 **IP-адрес**: `{d_ip}`")
+        if d_ua:
+            lines.append(f"📡 **User Agent**: `{d_ua}`")
+        if created_disp != "—":
+            lines.append(f"⏳ **Created**: {created_disp}" if lang == "en" else f"⏳ **Создан**: {created_disp}")
+        if updated_disp != "—":
+            lines.append(f"🔄 **Updated**: {updated_disp}" if lang == "en" else f"🔄 **Обновлен**: {updated_disp}")
+    else:
+        lines.append(f"📱 **Device #{idx+1}**: `{str(dev)}`")
+
+    text = "\n".join(lines)
+    await callback.message.edit_text(
+        text,
+        reply_markup=keyboards.single_device_kb(user_id, dev_identifier, lang=lang),
         parse_mode="Markdown"
     )
     await callback.answer()
