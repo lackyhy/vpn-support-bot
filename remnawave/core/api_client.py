@@ -349,6 +349,33 @@ class RemnawaveClient:
                 return res
         return {"success": False, "msg": "Failed to delete device"}
 
+    # ================== PANELS / SUBSCRIPTION PAGE CONFIGS ==================
+    async def create_subpage_config(self, name: str, html_content: str = "") -> Dict[str, Any]:
+        payload = {
+            "name": name,
+            "html": html_content
+        }
+        return await self._request("POST", "/api/subscription-page-configs", json=payload)
+
+    async def update_subpage_config(self, uuid: str, data: Dict[str, Any]) -> Dict[str, Any]:
+        return await self._request("PATCH", f"/api/subscription-page-configs/{uuid}", json=data)
+
+    async def delete_subpage_config(self, uuid: str) -> Dict[str, Any]:
+        return await self._request("DELETE", f"/api/subscription-page-configs/{uuid}")
+
+    async def clone_subpage_config(self, uuid: str) -> Dict[str, Any]:
+        return await self._request("POST", f"/api/subscription-page-configs/{uuid}/clone")
+
+    # ================== SYSTEM METRICS ==================
+    async def get_system_stats(self) -> Dict[str, Any]:
+        return await self._request("GET", "/api/system/stats")
+
+    async def get_system_bandwidth(self) -> Dict[str, Any]:
+        return await self._request("GET", "/api/system/stats/bandwidth")
+
+    async def get_system_health(self) -> Dict[str, Any]:
+        return await self._request("GET", "/api/system/health")
+
 def _device_matches_user(item: Any, user_id: int, username: Optional[str] = None, user_uuid: Optional[str] = None) -> bool:
     if not isinstance(item, dict):
         return True
@@ -356,7 +383,6 @@ def _device_matches_user(item: Any, user_id: int, username: Optional[str] = None
     cand_ids = []
     cand_names = []
 
-    # Check top-level user fields ONLY (NOT item['id'] or item['uuid'] which are device IDs!)
     for k in ["userId", "user_id"]:
         val = item.get(k)
         if val is not None and not isinstance(val, (dict, list)):
@@ -372,7 +398,6 @@ def _device_matches_user(item: Any, user_id: int, username: Optional[str] = None
     if isinstance(item.get("user_name"), str):
         cand_names.append(str(item.get("user_name")).lower())
 
-    # Check nested user object
     u_obj = item.get("user") or item.get("owner") or item.get("account")
     if isinstance(u_obj, dict):
         for k in ["id", "userId", "user_id", "uuid", "userUuid"]:
@@ -402,29 +427,3 @@ def _device_matches_user(item: Any, user_id: int, username: Optional[str] = None
         return True
 
     return False
-
-    async def create_subpage_config(self, name: str, html_content: str = "") -> Dict[str, Any]:
-        payload = {
-            "name": name,
-            "html": html_content
-        }
-        return await self._request("POST", "/api/subscription-page-configs", json=payload)
-
-    async def update_subpage_config(self, uuid: str, data: Dict[str, Any]) -> Dict[str, Any]:
-        return await self._request("PATCH", f"/api/subscription-page-configs/{uuid}", json=data)
-
-    async def delete_subpage_config(self, uuid: str) -> Dict[str, Any]:
-        return await self._request("DELETE", f"/api/subscription-page-configs/{uuid}")
-
-    async def clone_subpage_config(self, uuid: str) -> Dict[str, Any]:
-        return await self._request("POST", f"/api/subscription-page-configs/{uuid}/clone")
-
-    # ================== SYSTEM METRICS ==================
-    async def get_system_stats(self) -> Dict[str, Any]:
-        return await self._request("GET", "/api/system/stats")
-
-    async def get_system_bandwidth(self) -> Dict[str, Any]:
-        return await self._request("GET", "/api/system/stats/bandwidth")
-
-    async def get_system_health(self) -> Dict[str, Any]:
-        return await self._request("GET", "/api/system/health")
