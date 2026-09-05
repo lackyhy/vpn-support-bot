@@ -275,15 +275,31 @@ class RemnawaveClient:
         return res
 
     # ================== HWID DEVICES ==================
-    async def get_user_hwid_devices(self, user_id: int, username: Optional[str] = None) -> Dict[str, Any]:
-        endpoints = [
-            f"/api/hwid-devices/user/{user_id}",
-            f"/api/hwid-devices/users/{user_id}",
+    async def get_user_hwid_devices(self, user_id: int, username: Optional[str] = None, user_uuid: Optional[str] = None) -> Dict[str, Any]:
+        endpoints = []
+        if user_uuid:
+            endpoints.extend([
+                f"/api/users/{user_uuid}/hwid-devices",
+                f"/api/users/{user_uuid}/devices",
+                f"/api/users/{user_uuid}/hwid",
+                f"/api/internal-hwid-devices/user/{user_uuid}",
+                f"/api/hwid-devices/user/{user_uuid}",
+                f"/api/hwid/user/{user_uuid}",
+                f"/api/hwid-devices?userUuid={user_uuid}",
+            ])
+        endpoints.extend([
             f"/api/users/{user_id}/hwid-devices",
             f"/api/users/{user_id}/devices",
-            f"/api/hwid-devices/by-user/{user_id}",
+            f"/api/users/{user_id}/hwid",
+            f"/api/internal-hwid-devices/user/{user_id}",
+            f"/api/hwid-devices/user/{user_id}",
+            f"/api/hwid/user/{user_id}",
+            f"/api/internal-hwid-devices",
+            f"/api/user-hwid-devices",
+            f"/api/hwids",
+            f"/api/hwid",
             f"/api/hwid-devices",
-        ]
+        ])
         
         for ep in endpoints:
             res = await self._request("GET", ep)
@@ -297,50 +313,112 @@ class RemnawaveClient:
                         response_data.get("devices") or 
                         response_data.get("hwidDevices") or 
                         response_data.get("userHwidDevices") or
+                        response_data.get("internalHwidDevices") or
                         response_data.get("items") or 
+                        response_data.get("data") or
                         response_data.get("response") or
                         []
                     )
 
                 if items:
-                    filtered = []
-                    for item in items:
-                        if isinstance(item, dict):
-                            item_u_id = item.get("userId") or item.get("user_id") or (item.get("user", {}).get("id") if isinstance(item.get("user"), dict) else None)
-                            item_u_name = item.get("username") or (item.get("user", {}).get("username") if isinstance(item.get("user"), dict) else None)
-
-                            if item_u_id is not None:
-                                if str(item_u_id) == str(user_id):
-                                    filtered.append(item)
-                            elif item_u_name and username:
-                                if item_u_name.lower() == username.lower():
-                                    filtered.append(item)
-                            else:
-                                if ep != "/api/hwid-devices":
-                                    filtered.append(item)
-                        else:
-                            filtered.append(item)
-
-                    if filtered:
-                        return {"success": True, "response": filtered}
-                    elif ep != "/api/hwid-devices":
+                    if ep in ["/api/hwid-devices", "/api/internal-hwid-devices", "/api/user-hwid-devices", "/api/hwids", "/api/hwid"]:
+                        filtered = [it for it in items if _device_matches_user(it, user_id, username, user_uuid)]
+                        if filtered:
+                            return {"success": True, "response": filtered}
+                    else:
                         return {"success": True, "response": items}
 
         return {"success": False, "msg": "No HWID devices found"}
 
-    async def clear_user_hwid_devices(self, user_id: int) -> Dict[str, Any]:
-        res = await self._request("DELETE", f"/api/users/{user_id}/hwid-devices")
-        if not res.get("success"):
-            res = await self._request("POST", f"/api/users/{user_id}/actions/reset-hwid")
-        if not res.get("success"):
-            res = await self._request("POST", f"/api/users/{user_id}/actions/clear-hwid")
-        return res
+    async def clear_user_hwid_devices(self, user_id: int, user_uuid: Optional[str] = None) -> Dict[str, Any]:
+        endpoints = []
+        if user_uuid:
+            endpoints.extend([
+                (f"/api/users/{user_uuid}/hwid-devices", "DELETE"),
+                (f"/api/users/{user_uuid}/devices", "DELETE"),
+                (f"/api/users/{user_uuid}/actions/reset-hwid", "POST"),
+                (f"/api/users/{user_uuid}/actions/clear-hwid", "POST"),
+                (f"/api/internal-hwid-devices/user/{user_uuid}", "DELETE"),
+                (f"/api/hwid-devices/user/{user_uuid}", "DELETE"),
+            ])
+        endpoints.extend([
+            (f"/api/users/{user_id}/hwid-devices", "DELETE"),
+            (f"/api/users/{user_id}/devices", "DELETE"),
+            (f"/api/users/{user_id}/actions/reset-hwid", "POST"),
+            (f"/api/users/{user_id}/actions/clear-hwid", "POST"),
+            (f"/api/internal-hwid-devices/user/{user_id}", "DELETE"),
+            (f"/api/hwid-devices/user/{user_id}", "DELETE"),
+        ])
+        for ep, method in endpoints:
+            res = await self._request(method, ep)
+            if res.get("success"):
+                return res
+        return {"success": False, "msg": "Failed to clear HWID devices"}
 
     async def delete_hwid_device(self, user_id: int, device_id: str) -> Dict[str, Any]:
-        res = await self._request("DELETE", f"/api/users/{user_id}/hwid-devices/{device_id}")
-        if not res.get("success"):
-            res = await self._request("DELETE", f"/api/hwid-devices/{device_id}")
-        return res
+        endpoints = [
+            (f"/api/users/{user_id}/hwid-devices/{device_id}", "DELETE"),
+            (f"/api/users/{user_id}/devices/{device_id}", "DELETE"),
+            (f"/api/internal-hwid-devices/{device_id}", "DELETE"),
+            (f"/api/hwid-devices/{device_id}", "DELETE"),
+            (f"/api/hwid/{device_id}", "DELETE"),
+        ]
+        for ep, method in endpoints:
+            res = await self._request(method, ep)
+            if res.get("success"):
+                return res
+        return {"success": False, "msg": "Failed to delete device"}
+
+def _device_matches_user(item: Any, user_id: int, username: Optional[str] = None, user_uuid: Optional[str] = None) -> bool:
+    if not isinstance(item, dict):
+        return True
+
+    u_obj = item.get("user") or item.get("owner") or item.get("account")
+
+    cand_ids = []
+    cand_names = []
+
+    for k in ["userId", "user_id", "id"]:
+        val = item.get(k)
+        if val is not None and not isinstance(val, (dict, list)):
+            cand_ids.append(str(val))
+
+    for k in ["userUuid", "user_uuid", "uuid"]:
+        val = item.get(k)
+        if val is not None and not isinstance(val, (dict, list)):
+            cand_ids.append(str(val))
+
+    for k in ["username", "user_name", "user"]:
+        val = item.get(k)
+        if isinstance(val, str):
+            cand_names.append(val.lower())
+
+    if isinstance(u_obj, dict):
+        for k in ["id", "userId", "user_id", "uuid", "userUuid"]:
+            val = u_obj.get(k)
+            if val is not None and not isinstance(val, (dict, list)):
+                cand_ids.append(str(val))
+        for k in ["username", "name", "user_name"]:
+            val = u_obj.get(k)
+            if isinstance(val, str):
+                cand_names.append(val.lower())
+    elif isinstance(u_obj, (int, str)):
+        val_str = str(u_obj).lower()
+        cand_ids.append(val_str)
+        cand_names.append(val_str)
+
+    target_id = str(user_id)
+    target_name = username.lower() if username else None
+    target_uuid = str(user_uuid) if user_uuid else None
+
+    if target_id in cand_ids:
+        return True
+    if target_uuid and target_uuid in cand_ids:
+        return True
+    if target_name and target_name in cand_names:
+        return True
+
+    return False
 
     async def create_subpage_config(self, name: str, html_content: str = "") -> Dict[str, Any]:
         payload = {

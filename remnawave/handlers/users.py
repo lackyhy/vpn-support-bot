@@ -452,8 +452,9 @@ async def cb_user_devices(callback: CallbackQuery):
 
     user = user_res.get("response", {})
     username = user.get("username", "Unknown")
+    user_uuid = user.get("uuid")
 
-    devices_res = await client.get_user_hwid_devices(user_id, username=username)
+    devices_res = await client.get_user_hwid_devices(user_id, username=username, user_uuid=user_uuid)
     await client.close()
 
     hwid_limit = user.get("hwidDeviceLimit", 0)
@@ -469,6 +470,7 @@ async def cb_user_devices(callback: CallbackQuery):
                 resp_d.get("devices") or 
                 resp_d.get("hwidDevices") or 
                 resp_d.get("userHwidDevices") or
+                resp_d.get("internalHwidDevices") or
                 resp_d.get("items") or 
                 []
             )
@@ -477,9 +479,12 @@ async def cb_user_devices(callback: CallbackQuery):
         devices = (
             user.get("userHwidDevices") or
             user.get("hwidDevices") or 
+            user.get("internalHwidDevices") or
             user.get("devices") or 
             user.get("userDevices") or 
+            user.get("hwids") or
             user.get("userTraffic", {}).get("hwidDevices") or 
+            user.get("userTraffic", {}).get("devices") or
             []
         )
 
