@@ -241,25 +241,51 @@ class RemnawaveClient:
         return await self._request("POST", "/api/users", json=payload)
 
     async def update_user(self, user_id: int, data: Dict[str, Any], user_uuid: Optional[str] = None) -> Dict[str, Any]:
-        payload = dict(data)
-        payload["id"] = int(user_id)
-        if user_uuid:
-            payload["uuid"] = user_uuid
+        # 1. Fetch current user data to construct complete payload expected by Remnawave PATCH /api/users
+        get_res = await self._request("GET", f"/api/users/{user_id}")
+        if not get_res.get("success") and user_uuid:
+            get_res = await self._request("GET", f"/api/users/{user_uuid}")
 
-        endpoints = []
+        current_user = get_res.get("response", {}) if isinstance(get_res.get("response"), dict) else {}
+
+        raw_squads = current_user.get("activeInternalSquads", [])
+        squad_uuids = []
+        if isinstance(raw_squads, list):
+            for s in raw_squads:
+                if isinstance(s, dict) and "uuid" in s:
+                    squad_uuids.append(s["uuid"])
+                elif isinstance(s, str):
+                    squad_uuids.append(s)
+
+        full_payload = {
+            "id": int(user_id),
+            "username": current_user.get("username", ""),
+            "status": current_user.get("status", "ACTIVE"),
+            "trafficLimitBytes": current_user.get("trafficLimitBytes", 0),
+            "trafficLimitStrategy": current_user.get("trafficLimitStrategy", "NO_RESET"),
+            "expireAt": current_user.get("expireAt", ""),
+            "description": current_user.get("description"),
+            "tag": current_user.get("tag"),
+            "telegramId": current_user.get("telegramId"),
+            "email": current_user.get("email"),
+            "hwidDeviceLimit": current_user.get("hwidDeviceLimit"),
+            "activeInternalSquads": squad_uuids,
+            "externalSquadUuid": current_user.get("externalSquadUuid"),
+        }
         if user_uuid:
-            endpoints.extend([
-                ("PATCH", f"/api/users/{user_uuid}", data),
-                ("PATCH", f"/api/users/{user_uuid}", payload),
-                ("PUT", f"/api/users/{user_uuid}", data),
-            ])
-        endpoints.extend([
+            full_payload["uuid"] = user_uuid
+
+        # Override full_payload with specific input data
+        full_payload.update(data)
+
+        endpoints = [
+            ("PATCH", "/api/users", full_payload),
+            ("PATCH", f"/api/users/{user_id}", full_payload),
             ("PATCH", f"/api/users/{user_id}", data),
-            ("PATCH", f"/api/users/{user_id}", payload),
-            ("PUT", f"/api/users/{user_id}", data),
-            ("PATCH", "/api/users", payload),
-            ("PUT", "/api/users", payload),
-        ])
+        ]
+        if user_uuid:
+            endpoints.insert(0, ("PATCH", f"/api/users/{user_uuid}", full_payload))
+            endpoints.insert(0, ("PATCH", f"/api/users/{user_uuid}", data))
 
         last_res = {"success": False, "msg": "Failed to update user"}
         for method, ep, req_data in endpoints:
