@@ -436,6 +436,125 @@ async def process_user_limit(message: Message, state: FSMContext):
     from remnawave.handlers.start import show_remna_dashboard
     await show_remna_dashboard(message, state)
 
+# VIEW & MANAGE HWID DEVICES
+@router.callback_query(F.data.startswith("remna_user_devices_"))
+async def cb_user_devices(callback: CallbackQuery):
+    lang = bot_settings.get_language()
+    user_id = int(callback.data.replace("remna_user_devices_", ""))
+
+    client = RemnawaveClient.from_storage()
+    import asyncio
+    results = await asyncio.gather(
+        client._request("GET", f"/api/users/{user_id}"),
+        client.get_user_hwid_devices(user_id),
+        return_exceptions=True
+    )
+    await client.close()
+
+    user_res = results[0] if not isinstance(results[0], Exception) else {}
+    devices_res = results[1] if not isinstance(results[1], Exception) else {}
+
+    if not user_res.get("success", False):
+        await callback.answer(f"Error: {user_res.get('msg')}", show_alert=True)
+        return
+
+    user = user_res.get("response", {})
+    username = user.get("username", "Unknown")
+
+    hwid_limit = user.get("hwidDeviceLimit", 0)
+    hwid_limit_str = f"{hwid_limit}" if hwid_limit and hwid_limit > 0 else ("Unlimited" if lang == "en" else "Безлимит")
+
+    devices = []
+    if isinstance(devices_res, dict) and devices_res.get("success"):
+        resp_d = devices_res.get("response", [])
+        if isinstance(resp_d, list):
+            devices = resp_d
+        elif isinstance(resp_d, dict):
+            devices = resp_d.get("devices") or resp_d.get("hwidDevices") or resp_d.get("items") or []
+
+    if not devices:
+        devices = user.get("hwidDevices") or user.get("devices") or user.get("userDevices") or user.get("userTraffic", {}).get("hwidDevices") or []
+
+    dev_count = len(devices)
+
+    lines = []
+    if lang == "en":
+        lines.append(f"📱 **HWID Devices for user: {username}**")
+        lines.append("━━━━━━━━━━━━━━━━━━")
+        lines.append(f"🆔 **ID**: `{user_id}`")
+        lines.append(f"📏 **HWID Limit**: `{hwid_limit_str}`")
+        lines.append(f"📊 **Registered Devices**: `{dev_count}`\n")
+    else:
+        lines.append(f"📱 **Устройства HWID пользователя: {username}**")
+        lines.append("━━━━━━━━━━━━━━━━━━")
+        lines.append(f"🆔 **ID**: `{user_id}`")
+        lines.append(f"📏 **Лимит устройств (HWID)**: `{hwid_limit_str}`")
+        lines.append(f"📊 **Привязано устройств**: `{dev_count}`\n")
+
+    if devices:
+        for idx, dev in enumerate(devices):
+            if isinstance(dev, str):
+                lines.append(f"📱 **Device #{idx+1}**: `{dev}`")
+            elif isinstance(dev, dict):
+                d_name = dev.get("model") or dev.get("name") or dev.get("platform") or dev.get("title") or dev.get("device") or dev.get("userAgent")
+                d_hwid = dev.get("hwid") or dev.get("id") or dev.get("uuid") or dev.get("fingerprint")
+                d_seen = dev.get("lastOnlineAt") or dev.get("updatedAt") or dev.get("lastSeenAt") or dev.get("onlineAt") or dev.get("createdAt")
+
+                hwid_disp = f"`{d_hwid}`" if d_hwid else "—"
+                seen_disp = format_iso_date(d_seen) if d_seen else "—"
+
+                det = [f"**HWID**: {hwid_disp}"]
+                if d_name:
+                    det.append(f"**Model/OS**: {d_name}")
+                if seen_disp != "—":
+                    det.append(f"**Last active**: {seen_disp}" if lang == "en" else f"**Активность**: {seen_disp}")
+
+                lines.append(f"📱 **Device #{idx+1}**:\n  • " + "\n  • ".join(det))
+            else:
+                lines.append(f"📱 **Device #{idx+1}**: `{str(dev)}`")
+    else:
+        lines.append("ℹ️ No registered devices yet." if lang == "en" else "ℹ️ Привязанных устройств пока нет.")
+
+    text = "\n".join(lines)
+    await callback.message.edit_text(
+        text,
+        reply_markup=keyboards.user_devices_kb(user_id, devices, lang=lang),
+        parse_mode="Markdown"
+    )
+    await callback.answer()
+
+@router.callback_query(F.data.startswith("remna_dev_clear_"))
+async def cb_user_dev_clear(callback: CallbackQuery):
+    lang = bot_settings.get_language()
+    user_id = int(callback.data.replace("remna_dev_clear_", ""))
+
+    client = RemnawaveClient.from_storage()
+    res = await client.clear_user_hwid_devices(user_id)
+    await client.close()
+
+    if res.get("success"):
+        await callback.answer("All devices cleared!" if lang == "en" else "Все привязки устройств сброшены!", show_alert=True)
+        await cb_user_devices(callback)
+    else:
+        await callback.answer(f"Failed: {res.get('msg')}", show_alert=True)
+
+@router.callback_query(F.data.startswith("remna_dev_del_"))
+async def cb_user_dev_del(callback: CallbackQuery):
+    lang = bot_settings.get_language()
+    parts = callback.data.replace("remna_dev_del_", "").split("_")
+    user_id = int(parts[0])
+    dev_id = "_".join(parts[1:])
+
+    client = RemnawaveClient.from_storage()
+    res = await client.delete_hwid_device(user_id, dev_id)
+    await client.close()
+
+    if res.get("success"):
+        await callback.answer("Device deleted!" if lang == "en" else "Устройство удалено!", show_alert=True)
+        await cb_user_devices(callback)
+    else:
+        await callback.answer(f"Failed: {res.get('msg')}", show_alert=True)
+
 # EDIT HWID LIMIT
 @router.callback_query(F.data.startswith("remna_user_hwid_"))
 async def cb_user_hwid_start(callback: CallbackQuery, state: FSMContext):

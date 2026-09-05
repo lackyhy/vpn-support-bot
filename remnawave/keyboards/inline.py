@@ -99,11 +99,42 @@ def user_detail_kb(user_id: int, status: str, lang: Optional[str] = None) -> Inl
     ])
 
     buttons.append([
-        InlineKeyboardButton(text="📱 HWID Limit" if cur_lang == "en" else "📱 Лимит HWID", callback_data=f"remna_user_hwid_{user_id}"),
+        InlineKeyboardButton(text="📱 HWID / Devices" if cur_lang == "en" else "📱 Устройства HWID", callback_data=f"remna_user_devices_{user_id}"),
         InlineKeyboardButton(text="🗑 Delete" if cur_lang == "en" else "🗑 Удалить", callback_data=f"remna_user_delete_{user_id}")
     ])
 
     buttons.append([InlineKeyboardButton(text="🔙 Back to list" if cur_lang == "en" else "🔙 К списку", callback_data="remna_menu_users")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+def user_devices_kb(user_id: int, devices: List[Any] = None, lang: Optional[str] = None) -> InlineKeyboardMarkup:
+    cur_lang = lang or "en"
+    buttons = []
+
+    if devices:
+        for idx, dev in enumerate(devices[:5]):
+            dev_id = None
+            if isinstance(dev, dict):
+                dev_id = dev.get("id") or dev.get("uuid") or dev.get("hwid")
+            if dev_id:
+                label = dev.get("model") or dev.get("name") or dev.get("platform") or f"Device #{idx+1}"
+                buttons.append([
+                    InlineKeyboardButton(
+                        text=f"🗑 {label}" if cur_lang == "en" else f"🗑 Удалить {label}",
+                        callback_data=f"remna_dev_del_{user_id}_{dev_id}"
+                    )
+                ])
+
+        buttons.append([
+            InlineKeyboardButton(
+                text="🧹 Clear All Devices" if cur_lang == "en" else "🧹 Сбросить все устройства",
+                callback_data=f"remna_dev_clear_{user_id}"
+            )
+        ])
+
+    buttons.append([
+        InlineKeyboardButton(text="✏️ Edit Limit" if cur_lang == "en" else "✏️ Изменить лимит HWID", callback_data=f"remna_user_hwid_{user_id}"),
+        InlineKeyboardButton(text="🔙 Back to User" if cur_lang == "en" else "🔙 К пользователю", callback_data=f"remna_user_view_{user_id}")
+    ])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 def nodes_list_kb(nodes: List[Dict[str, Any]], lang: Optional[str] = None) -> InlineKeyboardMarkup:

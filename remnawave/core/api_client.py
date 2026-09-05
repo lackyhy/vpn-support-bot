@@ -274,6 +274,29 @@ class RemnawaveClient:
             res = await self._request("GET", "/api/squads")
         return res
 
+    # ================== HWID DEVICES ==================
+    async def get_user_hwid_devices(self, user_id: int) -> Dict[str, Any]:
+        res = await self._request("GET", f"/api/users/{user_id}/hwid-devices")
+        if not res.get("success"):
+            res = await self._request("GET", f"/api/users/{user_id}/devices")
+        if not res.get("success"):
+            res = await self._request("GET", f"/api/hwid-devices", params={"userId": user_id})
+        return res
+
+    async def clear_user_hwid_devices(self, user_id: int) -> Dict[str, Any]:
+        res = await self._request("DELETE", f"/api/users/{user_id}/hwid-devices")
+        if not res.get("success"):
+            res = await self._request("POST", f"/api/users/{user_id}/actions/reset-hwid")
+        if not res.get("success"):
+            res = await self._request("POST", f"/api/users/{user_id}/actions/clear-hwid")
+        return res
+
+    async def delete_hwid_device(self, user_id: int, device_id: str) -> Dict[str, Any]:
+        res = await self._request("DELETE", f"/api/users/{user_id}/hwid-devices/{device_id}")
+        if not res.get("success"):
+            res = await self._request("DELETE", f"/api/hwid-devices/{device_id}")
+        return res
+
     async def create_subpage_config(self, name: str, html_content: str = "") -> Dict[str, Any]:
         payload = {
             "name": name,
