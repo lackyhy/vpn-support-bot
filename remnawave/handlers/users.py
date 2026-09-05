@@ -436,6 +436,20 @@ async def process_user_limit(message: Message, state: FSMContext):
     from remnawave.handlers.start import show_remna_dashboard
     await show_remna_dashboard(message, state)
 
+def get_device_model(dev: Any) -> str:
+    if not isinstance(dev, dict):
+        return ""
+    for k in ["deviceModel", "device_model", "model", "deviceName", "device_name", "name", "title", "device", "customName"]:
+        val = dev.get(k)
+        if val and isinstance(val, str) and val.strip():
+            return val.strip()
+    ua = dev.get("userAgent") or dev.get("user_agent")
+    if ua and isinstance(ua, str):
+        parts = ua.split("/")
+        if len(parts) >= 3:
+            return f"{parts[0]} ({parts[2]})"
+    return ""
+
 # VIEW & MANAGE HWID DEVICES
 @router.callback_query(F.data.startswith("remna_user_devices_"))
 async def cb_user_devices(callback: CallbackQuery):
@@ -512,7 +526,7 @@ async def cb_user_devices(callback: CallbackQuery):
 
             if isinstance(dev, dict):
                 platform = dev.get("platform") or dev.get("os") or ""
-                model = dev.get("model") or dev.get("name") or dev.get("title") or dev.get("device") or ""
+                model = get_device_model(dev)
 
                 if platform:
                     plat_l = str(platform).lower()
@@ -527,6 +541,7 @@ async def cb_user_devices(callback: CallbackQuery):
                     elif "linux" in plat_l:
                         icon = "🐧"
                     plat_str = str(platform)
+
                 if model:
                     model_str = f" ({model})"
 
@@ -612,7 +627,12 @@ async def cb_single_device_view(callback: CallbackQuery):
             dev_identifier = str(dev_id_raw)
 
         d_platform = dev.get("platform") or dev.get("os")
-        d_model = dev.get("model") or dev.get("name") or dev.get("title") or dev.get("device")
+        d_model = get_device_model(dev)
+        d_hwid = dev.get("hwid") or dev.get("id") or dev.get("uuid") or dev.get("fingerprint")
+        d_ip = dev.get("ipAddress") or dev.get("ip_address") or dev.get("ip")
+        d_ua = dev.get("userAgent") or dev.get("user_agent")
+        d_updated = dev.get("updatedAt") or dev.get("lastOnlineAt") or dev.get("lastSeenAt") or dev.get("onlineAt")
+        d_created = dev.get("createdAt")
         d_hwid = dev.get("hwid") or dev.get("id") or dev.get("uuid") or dev.get("fingerprint")
         d_ip = dev.get("ipAddress") or dev.get("ip_address") or dev.get("ip")
         d_ua = dev.get("userAgent") or dev.get("user_agent")

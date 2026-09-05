@@ -106,6 +106,15 @@ def user_detail_kb(user_id: int, status: str, lang: Optional[str] = None) -> Inl
     buttons.append([InlineKeyboardButton(text="🔙 Back to list" if cur_lang == "en" else "🔙 К списку", callback_data="remna_menu_users")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
+def get_device_model(dev: Any) -> str:
+    if not isinstance(dev, dict):
+        return ""
+    for k in ["deviceModel", "device_model", "model", "deviceName", "device_name", "name", "title", "device", "customName"]:
+        val = dev.get(k)
+        if val and isinstance(val, str) and val.strip():
+            return val.strip()
+    return ""
+
 def user_devices_kb(user_id: int, devices: List[Any] = None, lang: Optional[str] = None) -> InlineKeyboardMarkup:
     cur_lang = lang or "en"
     buttons = []
@@ -118,6 +127,8 @@ def user_devices_kb(user_id: int, devices: List[Any] = None, lang: Optional[str]
 
             if isinstance(dev, dict):
                 platform = dev.get("platform") or dev.get("os") or ""
+                model = get_device_model(dev)
+
                 if platform:
                     plat_l = str(platform).lower()
                     if "win" in plat_l:
@@ -134,6 +145,9 @@ def user_devices_kb(user_id: int, devices: List[Any] = None, lang: Optional[str]
                         label = f"#{idx+1} Android"
                     else:
                         label = f"#{idx+1} {str(platform)[:6]}"
+                elif model:
+                    short_m = model.split("_")[0].split("(")[0].strip()
+                    label = f"#{idx+1} {short_m[:10]}"
                 else:
                     label = f"#{idx+1} Device"
             elif isinstance(dev, str):
