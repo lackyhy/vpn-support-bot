@@ -276,30 +276,19 @@ class RemnawaveClient:
 
     # ================== HWID DEVICES ==================
     async def get_user_hwid_devices(self, user_id: int, username: Optional[str] = None, user_uuid: Optional[str] = None) -> Dict[str, Any]:
-        endpoints = []
-        if user_uuid:
-            endpoints.extend([
-                f"/api/users/{user_uuid}/hwid-devices",
-                f"/api/users/{user_uuid}/devices",
-                f"/api/users/{user_uuid}/hwid",
-                f"/api/internal-hwid-devices/user/{user_uuid}",
-                f"/api/hwid-devices/user/{user_uuid}",
-                f"/api/hwid/user/{user_uuid}",
-                f"/api/hwid-devices?userUuid={user_uuid}",
-            ])
-        endpoints.extend([
+        endpoints = [
+            f"/api/hwid/devices/user/{user_id}",
+            f"/api/hwid/devices/user/{user_uuid}" if user_uuid else None,
+            f"/api/hwid/devices/users/{user_id}",
+            f"/api/hwid/devices/users/{user_uuid}" if user_uuid else None,
+            f"/api/hwid/devices?userId={user_id}",
+            f"/api/hwid/devices?userUuid={user_uuid}" if user_uuid else None,
+            "/api/hwid/devices",
             f"/api/users/{user_id}/hwid-devices",
-            f"/api/users/{user_id}/devices",
-            f"/api/users/{user_id}/hwid",
-            f"/api/internal-hwid-devices/user/{user_id}",
-            f"/api/hwid-devices/user/{user_id}",
-            f"/api/hwid/user/{user_id}",
-            f"/api/internal-hwid-devices",
-            f"/api/user-hwid-devices",
-            f"/api/hwids",
-            f"/api/hwid",
-            f"/api/hwid-devices",
-        ])
+            f"/api/users/{user_uuid}/hwid-devices" if user_uuid else None,
+            "/api/hwid-devices",
+        ]
+        endpoints = [ep for ep in endpoints if ep]
         
         for ep in endpoints:
             res = await self._request("GET", ep)
@@ -321,7 +310,7 @@ class RemnawaveClient:
                     )
 
                 if items:
-                    if ep in ["/api/hwid-devices", "/api/internal-hwid-devices", "/api/user-hwid-devices", "/api/hwids", "/api/hwid"]:
+                    if ep in ["/api/hwid/devices", "/api/hwid-devices", "/api/internal-hwid-devices", "/api/user-hwid-devices", "/api/hwids", "/api/hwid"]:
                         filtered = [it for it in items if _device_matches_user(it, user_id, username, user_uuid)]
                         if filtered:
                             return {"success": True, "response": filtered}
@@ -334,20 +323,16 @@ class RemnawaveClient:
         endpoints = []
         if user_uuid:
             endpoints.extend([
+                (f"/api/hwid/devices/user/{user_uuid}", "DELETE"),
                 (f"/api/users/{user_uuid}/hwid-devices", "DELETE"),
-                (f"/api/users/{user_uuid}/devices", "DELETE"),
                 (f"/api/users/{user_uuid}/actions/reset-hwid", "POST"),
-                (f"/api/users/{user_uuid}/actions/clear-hwid", "POST"),
-                (f"/api/internal-hwid-devices/user/{user_uuid}", "DELETE"),
-                (f"/api/hwid-devices/user/{user_uuid}", "DELETE"),
             ])
         endpoints.extend([
+            (f"/api/hwid/devices/user/{user_id}", "DELETE"),
             (f"/api/users/{user_id}/hwid-devices", "DELETE"),
-            (f"/api/users/{user_id}/devices", "DELETE"),
             (f"/api/users/{user_id}/actions/reset-hwid", "POST"),
-            (f"/api/users/{user_id}/actions/clear-hwid", "POST"),
-            (f"/api/internal-hwid-devices/user/{user_id}", "DELETE"),
-            (f"/api/hwid-devices/user/{user_id}", "DELETE"),
+            ("/api/hwid/devices/clear", "POST"),
+            ("/api/hwid/devices", "DELETE"),
         ])
         for ep, method in endpoints:
             res = await self._request(method, ep)
@@ -357,11 +342,9 @@ class RemnawaveClient:
 
     async def delete_hwid_device(self, user_id: int, device_id: str) -> Dict[str, Any]:
         endpoints = [
+            (f"/api/hwid/devices/{device_id}", "DELETE"),
+            (f"/api/hwid/devices/user/{user_id}/{device_id}", "DELETE"),
             (f"/api/users/{user_id}/hwid-devices/{device_id}", "DELETE"),
-            (f"/api/users/{user_id}/devices/{device_id}", "DELETE"),
-            (f"/api/internal-hwid-devices/{device_id}", "DELETE"),
-            (f"/api/hwid-devices/{device_id}", "DELETE"),
-            (f"/api/hwid/{device_id}", "DELETE"),
         ]
         for ep, method in endpoints:
             res = await self._request(method, ep)
