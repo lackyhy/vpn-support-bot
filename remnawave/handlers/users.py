@@ -103,12 +103,14 @@ async def cb_user_view(callback: CallbackQuery):
     results = await asyncio.gather(
         client._request("GET", f"/api/users/{user_id}"),
         client.get_nodes(),
+        client.get_squads(),
         return_exceptions=True
     )
     await client.close()
     
     user_res = results[0] if not isinstance(results[0], Exception) else {}
     nodes_res = results[1] if not isinstance(results[1], Exception) else {}
+    squads_res = results[2] if not isinstance(results[2], Exception) else {}
     
     if not user_res.get("success", False):
         await callback.answer(f"Error: {user_res.get('msg')}", show_alert=True)
@@ -132,13 +134,12 @@ async def cb_user_view(callback: CallbackQuery):
     lifetime_traffic = traffic_info.get("lifetimeUsedTrafficBytes", 0)
     lifetime_str = format_bytes(lifetime_traffic)
     
-    online_at = format_iso_date(traffic_info.get("onlineAt"))
     hwid_limit = user.get("hwidDeviceLimit", 0)
     hwid_limit_str = f"{hwid_limit}" if hwid_limit and hwid_limit > 0 else ("Unlimited" if lang == "en" else "Безлимит")
     
     sub_url = user.get("subscriptionUrl", "—")
     
-    # Node lookup for last connected node
+    # Node lookup for last/active connected node
     node_lookup = {}
     if isinstance(nodes_res, dict) and nodes_res.get("success"):
         for n in nodes_res.get("response", []):
@@ -151,32 +152,114 @@ async def cb_user_view(callback: CallbackQuery):
     last_node_uuid = traffic_info.get("lastConnectedNodeUuid")
     last_node_name = node_lookup.get(last_node_uuid) if last_node_uuid else None
     
-    if last_node_name and traffic_info.get("onlineAt"):
-        online_at_val = f"{online_at} ({last_node_name})"
+    # Check online status (real-time connected check)
+    is_online = False
+    if user.get("isOnline") is True or traffic_info.get("isOnline") is True:
+        is_online = True
     else:
-        online_at_val = online_at
+        online_st = str(user.get("onlineStatus") or traffic_info.get("onlineStatus") or "").upper()
+        if online_st in ["ONLINE", "CONNECTED"]:
+            is_online = True
+        elif online_st in ["OFFLINE", "DISCONNECTED"]:
+            is_online = False
+        else:
+            raw_online_at = traffic_info.get("onlineAt") or user.get("onlineAt")
+            if raw_online_at:
+                try:
+                    cleaned = str(raw_online_at).split(".")[0].replace("Z", "")
+                    dt = datetime.datetime.strptime(cleaned, "%Y-%m-%dT%H:%M:%S")
+                    dt = dt.replace(tzinfo=datetime.timezone.utc)
+                    now_utc = datetime.datetime.now(datetime.timezone.utc)
+                    diff_sec = (now_utc - dt).total_seconds()
+                    if 0 <= diff_sec <= 180:
+                        is_online = True
+                except Exception:
+                    pass
+
+    if is_online:
+        if last_node_name:
+            online_status_str = f"🟢 Connected ({last_node_name})" if lang == "en" else f"🟢 Подключен ({last_node_name})"
+        else:
+            online_status_str = "🟢 Connected" if lang == "en" else "🟢 Подключен"
+    else:
+        online_status_str = "🔴 Disconnected" if lang == "en" else "🔴 Отключен"
+
+    # Squad lookup & extraction
+    squad_lookup = {}
+    if isinstance(squads_res, dict) and squads_res.get("success"):
+        squads_data = squads_res.get("response", [])
+        if isinstance(squads_data, list):
+            for sq in squads_data:
+                if isinstance(sq, dict):
+                    s_uuid = sq.get("uuid") or sq.get("id")
+                    s_name = sq.get("name") or sq.get("title")
+                    if s_uuid and s_name:
+                        squad_lookup[str(s_uuid)] = s_name
+    elif isinstance(squads_res, dict) and isinstance(squads_res.get("response"), dict):
+        squads_list = squads_res.get("response", {}).get("squads", [])
+        for sq in squads_list:
+            if isinstance(sq, dict):
+                s_uuid = sq.get("uuid") or sq.get("id")
+                s_name = sq.get("name") or sq.get("title")
+                if s_uuid and s_name:
+                    squad_lookup[str(s_uuid)] = s_name
+
+    def resolve_squad(u: dict, lookup: dict) -> str:
+        sq_val = u.get("squad") or u.get("squads") or u.get("activeSquad")
+        if sq_val:
+            if isinstance(sq_val, str):
+                return lookup.get(sq_val, sq_val)
+            elif isinstance(sq_val, dict):
+                name = sq_val.get("name") or sq_val.get("title")
+                if name:
+                    return name
+                uuid = sq_val.get("uuid") or sq_val.get("id")
+                if uuid and str(uuid) in lookup:
+                    return lookup[str(uuid)]
+            elif isinstance(sq_val, list):
+                res_names = []
+                for item in sq_val:
+                    if isinstance(item, str):
+                        res_names.append(lookup.get(item, item))
+                    elif isinstance(item, dict):
+                        n = item.get("name") or item.get("title") or lookup.get(str(item.get("uuid")), "")
+                        if n:
+                            res_names.append(n)
+                if res_names:
+                    return ", ".join(res_names)
         
+        if u.get("squadName"):
+            return str(u.get("squadName"))
+        sq_uuid = u.get("squadUuid") or u.get("squadId")
+        if sq_uuid and str(sq_uuid) in lookup:
+            return lookup[str(sq_uuid)]
+        return "—"
+
+    squad_str = resolve_squad(user, squad_lookup)
+
     text = (
         f"👤 **User Detail: {username}**\n"
         f"━━━━━━━━━━━━━━━━━━\n"
         f"🆔 **ID**: `{user_id}`\n"
         f"⚡ **Status**: {status_icon}\n"
+        f"🌐 **Online**: {online_status_str}\n"
+        f"🛡 **Squad**: {squad_str}\n"
         f"⏳ **Expires**: {expire_at}\n"
         f"🚦 **Traffic used**: {used_str} / {traffic_limit_str}\n"
         f"📈 **Lifetime Traffic**: {lifetime_str}\n"
-        f"📱 **HWID Limit**: {hwid_limit_str}\n"
-        f"🌐 **Last Online**: {online_at_val}\n\n"
+        f"📱 **HWID Limit**: {hwid_limit_str}\n\n"
         f"🔑 **Subscription Link**:\n`{sub_url}`"
         if lang == "en" else
         f"👤 **Детали пользователя: {username}**\n"
         f"━━━━━━━━━━━━━━━━━━\n"
         f"🆔 **ID**: `{user_id}`\n"
         f"⚡ **Статус**: {status_icon}\n"
+        f"🌐 **Онлайн**: {online_status_str}\n"
+        f"🛡 **Сквад**: {squad_str}\n"
         f"⏳ **Истекает**: {expire_at}\n"
         f"🚦 **Использовано**: {used_str} / {traffic_limit_str}\n"
         f"📈 **Трафик за всё время**: {lifetime_str}\n"
-        f"📱 **Лимит устройств (HWID)**: {hwid_limit_str}\n"
-        f"🌐 **Последняя активность**: {online_at_val}\n\n"
+        f"📱 **Лимит устройств (HWID)**: {hwid_limit_str}\n\n"
         f"🔑 **Ссылка подписки**:\n`{sub_url}`"
     )
     

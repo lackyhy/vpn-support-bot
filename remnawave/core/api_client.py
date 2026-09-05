@@ -267,6 +267,13 @@ class RemnawaveClient:
     async def get_subpage_configs(self) -> Dict[str, Any]:
         return await self._request("GET", "/api/subscription-page-configs")
 
+    # ================== SQUADS ==================
+    async def get_squads(self) -> Dict[str, Any]:
+        res = await self._request("GET", "/api/squads")
+        if not res.get("success"):
+            res = await self._request("GET", "/api/internal-squads")
+        return res
+
     async def create_subpage_config(self, name: str, html_content: str = "") -> Dict[str, Any]:
         payload = {
             "name": name,
