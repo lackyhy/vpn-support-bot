@@ -433,6 +433,51 @@ async def process_user_limit(message: Message, state: FSMContext):
     else:
         await message.answer(f"❌ Failed: {res.get('msg')}")
         
+# EDIT USERNAME
+@router.callback_query(F.data.startswith("remna_user_edit_username_"))
+async def cb_user_edit_username_start(callback: CallbackQuery, state: FSMContext):
+    lang = bot_settings.get_language()
+    user_id = int(callback.data.replace("remna_user_edit_username_", ""))
+    await state.update_data(user_id=user_id)
+    await state.set_state(RemnaUserStates.waiting_for_edit_username)
+    
+    text = (
+        f"✏️ **Edit Username (ID: `{user_id}`)**\n\nEnter new username for this user:"
+        if lang == "en" else
+        f"✏️ **Изменение имени пользователя (ID: `{user_id}`)**\n\nВведите новое имя пользователя (username):"
+    )
+    await callback.message.edit_text(text, reply_markup=keyboards.cancel_kb(lang=lang), parse_mode="Markdown")
+    await callback.answer()
+
+@router.message(RemnaUserStates.waiting_for_edit_username)
+async def process_user_edit_username(message: Message, state: FSMContext):
+    lang = bot_settings.get_language()
+    data = await state.get_data()
+    user_id = data.get("user_id")
+    
+    new_username = message.text.strip()
+    if not new_username or len(new_username) < 1:
+        await message.answer(
+            "❌ Username cannot be empty!" if lang == "en" else "❌ Имя пользователя не может быть пустым!"
+        )
+        return
+
+    client = RemnawaveClient.from_storage()
+    u_res = await client._request("GET", f"/api/users/{user_id}")
+    u_uuid = None
+    if isinstance(u_res, dict) and isinstance(u_res.get("response"), dict):
+        u_uuid = u_res.get("response", {}).get("uuid")
+
+    res = await client.update_user(user_id, {"username": new_username}, user_uuid=u_uuid)
+    await client.close()
+    
+    if res.get("success"):
+        await message.answer(
+            f"✅ Username updated to `{new_username}`!" if lang == "en" else f"✅ Имя пользователя обновлено на `{new_username}`!"
+        )
+    else:
+        await message.answer(f"❌ Failed: {res.get('msg')}")
+        
     await state.clear()
     from remnawave.handlers.start import show_remna_dashboard
     await show_remna_dashboard(message, state)

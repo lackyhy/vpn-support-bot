@@ -94,12 +94,16 @@ def user_detail_kb(user_id: int, status: str, lang: Optional[str] = None) -> Inl
     ])
     
     buttons.append([
-        InlineKeyboardButton(text="🚦 Reset Traffic" if cur_lang == "en" else "🚦 Сбросить трафик", callback_data=f"remna_user_reset_{user_id}"),
+        InlineKeyboardButton(text="✏️ Edit Username" if cur_lang == "en" else "✏️ Изменить ник", callback_data=f"remna_user_edit_username_{user_id}"),
         InlineKeyboardButton(text="✏️ Traffic Limit" if cur_lang == "en" else "✏️ Лимит трафика", callback_data=f"remna_user_limit_{user_id}")
     ])
 
     buttons.append([
-        InlineKeyboardButton(text="📱 HWID / Devices" if cur_lang == "en" else "📱 Устройства HWID", callback_data=f"remna_user_devices_{user_id}"),
+        InlineKeyboardButton(text="🚦 Reset Traffic" if cur_lang == "en" else "🚦 Сбросить трафик", callback_data=f"remna_user_reset_{user_id}"),
+        InlineKeyboardButton(text="📱 HWID / Devices" if cur_lang == "en" else "📱 Устройства HWID", callback_data=f"remna_user_devices_{user_id}")
+    ])
+
+    buttons.append([
         InlineKeyboardButton(text="🗑 Delete" if cur_lang == "en" else "🗑 Удалить", callback_data=f"remna_user_delete_{user_id}")
     ])
 

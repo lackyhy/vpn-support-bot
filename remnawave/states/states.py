@@ -9,6 +9,7 @@ class RemnaUserStates(StatesGroup):
     waiting_for_edit_gb = State()
     waiting_for_edit_hwid = State()
     waiting_for_extend_days = State()
+    waiting_for_edit_username = State()
 
 class RemnaNodeStates(StatesGroup):
     waiting_for_name = State()
