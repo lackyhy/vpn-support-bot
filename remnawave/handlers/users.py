@@ -443,23 +443,18 @@ async def cb_user_devices(callback: CallbackQuery):
     user_id = int(callback.data.replace("remna_user_devices_", ""))
 
     client = RemnawaveClient.from_storage()
-    import asyncio
-    results = await asyncio.gather(
-        client._request("GET", f"/api/users/{user_id}"),
-        client.get_user_hwid_devices(user_id),
-        return_exceptions=True
-    )
-    await client.close()
-
-    user_res = results[0] if not isinstance(results[0], Exception) else {}
-    devices_res = results[1] if not isinstance(results[1], Exception) else {}
-
+    user_res = await client._request("GET", f"/api/users/{user_id}")
+    
     if not user_res.get("success", False):
+        await client.close()
         await callback.answer(f"Error: {user_res.get('msg')}", show_alert=True)
         return
 
     user = user_res.get("response", {})
     username = user.get("username", "Unknown")
+
+    devices_res = await client.get_user_hwid_devices(user_id, username=username)
+    await client.close()
 
     hwid_limit = user.get("hwidDeviceLimit", 0)
     hwid_limit_str = f"{hwid_limit}" if hwid_limit and hwid_limit > 0 else ("Unlimited" if lang == "en" else "Безлимит")
@@ -470,10 +465,23 @@ async def cb_user_devices(callback: CallbackQuery):
         if isinstance(resp_d, list):
             devices = resp_d
         elif isinstance(resp_d, dict):
-            devices = resp_d.get("devices") or resp_d.get("hwidDevices") or resp_d.get("items") or []
+            devices = (
+                resp_d.get("devices") or 
+                resp_d.get("hwidDevices") or 
+                resp_d.get("userHwidDevices") or
+                resp_d.get("items") or 
+                []
+            )
 
     if not devices:
-        devices = user.get("hwidDevices") or user.get("devices") or user.get("userDevices") or user.get("userTraffic", {}).get("hwidDevices") or []
+        devices = (
+            user.get("userHwidDevices") or
+            user.get("hwidDevices") or 
+            user.get("devices") or 
+            user.get("userDevices") or 
+            user.get("userTraffic", {}).get("hwidDevices") or 
+            []
+        )
 
     dev_count = len(devices)
 
@@ -496,20 +504,55 @@ async def cb_user_devices(callback: CallbackQuery):
             if isinstance(dev, str):
                 lines.append(f"📱 **Device #{idx+1}**: `{dev}`")
             elif isinstance(dev, dict):
-                d_name = dev.get("model") or dev.get("name") or dev.get("platform") or dev.get("title") or dev.get("device") or dev.get("userAgent")
+                d_platform = dev.get("platform") or dev.get("os")
+                d_model = dev.get("model") or dev.get("name") or dev.get("title") or dev.get("device")
                 d_hwid = dev.get("hwid") or dev.get("id") or dev.get("uuid") or dev.get("fingerprint")
-                d_seen = dev.get("lastOnlineAt") or dev.get("updatedAt") or dev.get("lastSeenAt") or dev.get("onlineAt") or dev.get("createdAt")
+                d_ip = dev.get("ipAddress") or dev.get("ip_address") or dev.get("ip")
+                d_ua = dev.get("userAgent") or dev.get("user_agent")
+                d_updated = dev.get("updatedAt") or dev.get("lastOnlineAt") or dev.get("lastSeenAt") or dev.get("onlineAt")
+                d_created = dev.get("createdAt")
+
+                icon = "📱"
+                if d_platform:
+                    plat_l = str(d_platform).lower()
+                    if "win" in plat_l:
+                        icon = "💻"
+                    elif "ios" in plat_l or "iphone" in plat_l or "ipad" in plat_l:
+                        icon = "📱"
+                    elif "mac" in plat_l or "apple" in plat_l:
+                        icon = "💻"
+                    elif "android" in plat_l:
+                        icon = "🤖"
+                    elif "linux" in plat_l:
+                        icon = "🐧"
 
                 hwid_disp = f"`{d_hwid}`" if d_hwid else "—"
-                seen_disp = format_iso_date(d_seen) if d_seen else "—"
+                updated_disp = format_iso_date(d_updated) if d_updated else "—"
+                created_disp = format_iso_date(d_created) if d_created else "—"
 
-                det = [f"**HWID**: {hwid_disp}"]
-                if d_name:
-                    det.append(f"**Model/OS**: {d_name}")
-                if seen_disp != "—":
-                    det.append(f"**Last active**: {seen_disp}" if lang == "en" else f"**Активность**: {seen_disp}")
+                det = []
+                if d_platform and d_model:
+                    det.append(f"**Платформа / Модель**: {d_platform} ({d_model})" if lang == "ru" else f"**Platform / Model**: {d_platform} ({d_model})")
+                elif d_platform:
+                    det.append(f"**Платформа**: {d_platform}" if lang == "ru" else f"**Platform**: {d_platform}")
+                elif d_model:
+                    det.append(f"**Модель**: {d_model}" if lang == "ru" else f"**Model**: {d_model}")
 
-                lines.append(f"📱 **Device #{idx+1}**:\n  • " + "\n  • ".join(det))
+                det.append(f"**HWID**: {hwid_disp}")
+
+                if d_ip:
+                    det.append(f"**IP-адрес**: `{d_ip}`" if lang == "ru" else f"**IP Address**: `{d_ip}`")
+
+                if d_ua:
+                    ua_short = d_ua.split(" ")[0] if len(d_ua) > 35 else d_ua
+                    det.append(f"**User Agent**: `{ua_short}`")
+
+                if updated_disp != "—":
+                    det.append(f"**Обновлен**: {updated_disp}" if lang == "ru" else f"**Updated**: {updated_disp}")
+                elif created_disp != "—":
+                    det.append(f"**Создан**: {created_disp}" if lang == "ru" else f"**Created**: {created_disp}")
+
+                lines.append(f"{icon} **Устройство #{idx+1}**:\n  • " + "\n  • ".join(det))
             else:
                 lines.append(f"📱 **Device #{idx+1}**: `{str(dev)}`")
     else:

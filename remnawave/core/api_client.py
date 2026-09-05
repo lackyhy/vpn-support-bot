@@ -275,13 +275,58 @@ class RemnawaveClient:
         return res
 
     # ================== HWID DEVICES ==================
-    async def get_user_hwid_devices(self, user_id: int) -> Dict[str, Any]:
-        res = await self._request("GET", f"/api/users/{user_id}/hwid-devices")
-        if not res.get("success"):
-            res = await self._request("GET", f"/api/users/{user_id}/devices")
-        if not res.get("success"):
-            res = await self._request("GET", f"/api/hwid-devices", params={"userId": user_id})
-        return res
+    async def get_user_hwid_devices(self, user_id: int, username: Optional[str] = None) -> Dict[str, Any]:
+        endpoints = [
+            f"/api/hwid-devices/user/{user_id}",
+            f"/api/hwid-devices/users/{user_id}",
+            f"/api/users/{user_id}/hwid-devices",
+            f"/api/users/{user_id}/devices",
+            f"/api/hwid-devices/by-user/{user_id}",
+            f"/api/hwid-devices",
+        ]
+        
+        for ep in endpoints:
+            res = await self._request("GET", ep)
+            if res.get("success"):
+                response_data = res.get("response")
+                items = []
+                if isinstance(response_data, list):
+                    items = response_data
+                elif isinstance(response_data, dict):
+                    items = (
+                        response_data.get("devices") or 
+                        response_data.get("hwidDevices") or 
+                        response_data.get("userHwidDevices") or
+                        response_data.get("items") or 
+                        response_data.get("response") or
+                        []
+                    )
+
+                if items:
+                    filtered = []
+                    for item in items:
+                        if isinstance(item, dict):
+                            item_u_id = item.get("userId") or item.get("user_id") or (item.get("user", {}).get("id") if isinstance(item.get("user"), dict) else None)
+                            item_u_name = item.get("username") or (item.get("user", {}).get("username") if isinstance(item.get("user"), dict) else None)
+
+                            if item_u_id is not None:
+                                if str(item_u_id) == str(user_id):
+                                    filtered.append(item)
+                            elif item_u_name and username:
+                                if item_u_name.lower() == username.lower():
+                                    filtered.append(item)
+                            else:
+                                if ep != "/api/hwid-devices":
+                                    filtered.append(item)
+                        else:
+                            filtered.append(item)
+
+                    if filtered:
+                        return {"success": True, "response": filtered}
+                    elif ep != "/api/hwid-devices":
+                        return {"success": True, "response": items}
+
+        return {"success": False, "msg": "No HWID devices found"}
 
     async def clear_user_hwid_devices(self, user_id: int) -> Dict[str, Any]:
         res = await self._request("DELETE", f"/api/users/{user_id}/hwid-devices")
